@@ -145,14 +145,21 @@ def apply_filter(entries, text: str):
 
 def draw_help_line(stdscr, y, fragments):
     """
-    fragments = list of (text, attr) tuples.
-    E.g. [("Tab", BOLD), (" = switch pane  ", NORMAL)]
+    Draw styled help fragments safely in narrow terminals.
+    Stops drawing when no space remains.
     """
     x = 0
-    h, w = stdscr.getmaxyx()
+    _, w = stdscr.getmaxyx()
 
     for text, attr in fragments:
-        stdscr.addnstr(y, x, text, max(0, w - x - 1), attr)
+        if x >= w - 1:
+            break  # no room left at all
+
+        avail = w - x - 1
+        if avail <= 0:
+            break  # avoid addnstr(..., n<=0)
+
+        stdscr.addnstr(y, x, text, avail, attr)
         x += len(text)
 
 
@@ -321,6 +328,21 @@ def draw_ui(
     stdscr.erase()
     h, w = stdscr.getmaxyx()
     mid = w // 2
+
+    # If terminal is too small, show a message instead of rendering UI
+    MIN_W, MIN_H = 120, 12  # tweak to taste
+    if w < MIN_W or h < MIN_H:
+        stdscr.erase()
+        msg = f"Terminal too small for pymus ({w}x{h}). Resize to at least {MIN_W}x{MIN_H}."
+        stdscr.addnstr(
+            h // 2,
+            max(0, (w - len(msg)) // 2),
+            msg,
+            max(0, w - 1),
+            curses.A_BOLD,
+        )
+        stdscr.refresh()
+        return
 
     header = f"NCurses Music Player  |  Folder: {cwd}"
     stdscr.addnstr(0, 0, header, w - 1, curses.A_REVERSE)
