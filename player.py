@@ -4,10 +4,52 @@ import os
 import time
 from pathlib import Path
 import vlc
+from mutagen.easyid3 import EasyID3
+from mutagen.id3 import ID3NoHeaderError
 
 AUDIO_EXTS = {".mp3"}
-
 MUSIC_ROOT = Path("/Users/andrewpearce/Google Drive/My Drive/music")
+ID3_CACHE = {}
+
+################################################################################
+def get_id3_label(path: Path) -> str:
+    """
+    Return 'Artist — Title' from ID3 if available.
+    Fallback to filename stem (no extension).
+    """
+    p = str(path)
+    if p in ID3_CACHE:
+        return ID3_CACHE[p]
+
+    label = path.stem  # fallback
+
+    try:
+        tags = EasyID3(p)
+        title = tags.get("title", [None])[0]
+        album = tags.get("album", [None])[0]
+        # date = tags.get("date", [None])[0]
+        # tracknumber = tags.get("tracknumber", [None])[0]
+        # discnumber = tags.get("discnumber", [None])[0]
+        artist = tags.get("artist", [None])[0]
+        
+
+        if artist and title:
+            label = f"{artist} — {title}"
+        elif title:
+            label = title
+        elif artist:
+            label = artist
+        if album:
+            label += f" ({album})"
+
+    except ID3NoHeaderError:
+        pass
+    except Exception:
+        pass
+
+    ID3_CACHE[p] = label
+    return label
+
 
 def list_dir(path: Path):
     """Return sorted entries for left pane: dirs first, then MP3 files only."""
@@ -195,7 +237,7 @@ def draw_ui(stdscr, cwd, entries, left_cursor, left_top,
         help_line = "Tab=switch pane | Enter=open/play | s=queue/play folder | a=append | /=search | Right: x/delete=delete d=move down u=move up | Space=pause | n/p=next/prev | b=back | q=quit"
     stdscr.addnstr(h - 1, 0, help_line, w - 1, curses.A_REVERSE)
 
-    list_h = h - 3
+    list_h = h - 4
 
     # --- Left pane (browser) ---
     left_w = mid - 1
@@ -245,7 +287,7 @@ def draw_ui(stdscr, cwd, entries, left_cursor, left_top,
     # --- Now Playing + Progress Bar (keep existing functionality)
     #
     cur = player.current()
-    np_line = f"Now Playing: {cur.name if cur else '-'}"
+    np_line = f"Progress: "
     stdscr.addnstr(h - 3, 0, np_line, w - 1)
 
     pos, length = player.progress()
@@ -262,14 +304,14 @@ def draw_ui(stdscr, cwd, entries, left_cursor, left_top,
         time_line = f"{bar} {fmt_mmss(pos)} / {fmt_mmss(length)}"
     else:
         time_line = "[----------] 0:00 / 0:00"
-
     stdscr.addnstr(h - 3, max(0, w - len(time_line) - 1), time_line, len(time_line))
 
     #
     # --- New permanent playback-status line (centered + dim)
     #
     if cur:
-        status_line = f"Playing: {cur.name}"
+        np2_label = get_id3_label(cur) if cur else "-"
+        status_line = f"Now Playing: {np2_label}"
     else:
         status_line = " -- nothing being played ---"
 
