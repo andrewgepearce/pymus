@@ -1,2 +1,24 @@
 [tool.black]
 line-length = 200
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pymus"
+version = "1.0.2"
+description = "Terminal music player for MP3 folders"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "python-vlc",
+  "mutagen"
+]
+
+[project.scripts]
+pymus = "pymus.cli:run"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["pymus"]

@@ -109,7 +109,6 @@ def save_playlist_state(player):
         pass
 
 
-################################################################################
 def list_dir(path: Path):
     """Return sorted entries for left pane: dirs first, then MP3 files only."""
     try:
@@ -125,7 +124,6 @@ def list_dir(path: Path):
     return dirs + mp3_files
 
 
-################################################################################
 def collect_mp3s(folder: Path):
     """Recursively collect mp3 files, sorted A-Z0-9 by filename."""
     files = []
@@ -137,7 +135,6 @@ def collect_mp3s(folder: Path):
     return sorted(files, key=lambda p: p.name.lower())
 
 
-################################################################################
 def apply_filter(entries, text: str):
     """Filter entries by substring (case-insensitive) on name."""
     if not text:
@@ -146,7 +143,6 @@ def apply_filter(entries, text: str):
     return [e for e in entries if t in e.name.lower()]
 
 
-################################################################################
 def draw_help_line(stdscr, y, fragments):
     """
     fragments = list of (text, attr) tuples.
@@ -154,15 +150,9 @@ def draw_help_line(stdscr, y, fragments):
     """
     x = 0
     h, w = stdscr.getmaxyx()
+
     for text, attr in fragments:
-        if x >= w - 1:
-            break  # no room left at all
-
-        avail = w - x - 1
-        if avail <= 0:
-            break  # defensive: avoid addnstr(..., n<=0)
-
-        stdscr.addnstr(y, x, text, avail, attr)
+        stdscr.addnstr(y, x, text, max(0, w - x - 1), attr)
         x += len(text)
 
 
@@ -781,5 +771,11 @@ def main(stdscr):
         player.player.stop()
 
 
+################################################################################
+def run():
+    curses.wrapper(main)
+
+
+################################################################################
 if __name__ == "__main__":
     curses.wrapper(main)
