@@ -5,6 +5,22 @@ import time
 from pathlib import Path
 import vlc
 
+
+################################################################################
+# list_dir() → shows folders/files in sorted order for browsing.
+# collect_mp3s() → walks a folder tree and grabs .mp3 files.
+# AudioPlayer → wraps VLC:
+  # holds queue
+  # play/pause/next/prev
+  # progress
+# draw_ui() → paints the terminal window.
+# main() → event loop:
+  # reads keys
+  # updates state
+  # triggers playback
+################################################################################
+
+
 AUDIO_EXTS = {".mp3"}
 
 # >>> NEW: Your music root
@@ -27,8 +43,9 @@ def list_dir(path: Path):
   except PermissionError:
     return []
   dirs = sorted([e for e in entries if e.is_dir()], key=lambda p: p.name.lower())
+  mp3_files = sorted([e for e in entries if e.is_file() and e.suffix.lower() in AUDIO_EXTS], key=lambda p: p.name.lower())
   files = sorted([e for e in entries if e.is_file()], key=lambda p: p.name.lower())
-  return dirs + files
+  return dirs + mp3_files
 
 ################################################################################
 # Recursively collects all MP3 files from the given folder and its subdirectories.
