@@ -22,3 +22,10 @@ pymus = "pymus.cli:run"
 [tool.setuptools]
 package-dir = {"" = "src"}
 packages = ["pymus"]
+
+[project.optional-dependencies]
+dev = [
+  "black",
+  "ruff",
+  "build"
+]

@@ -242,7 +242,7 @@ class AudioPlayer:
 
         removing_current = i == self.idx
 
-        removed = self.queue.pop(i)
+        self.queue.pop(i)
 
         if not self.queue:
             # Queue now empty
@@ -420,7 +420,7 @@ def draw_ui(
     # --- Now Playing + Progress Bar (keep existing functionality)
     #
     cur = player.current()
-    np_line = f"Progress: "
+    np_line = "Progress: "
     stdscr.addnstr(h - 3, 0, np_line, w - 1)
 
     pos, length = player.progress()
@@ -470,7 +470,7 @@ def main(stdscr):
         curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)
         curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
         NOWPLAYING_COLOR = curses.color_pair(1) | curses.A_BOLD
-    except:
+    except Exception:
         NOWPLAYING_COLOR = curses.A_BOLD
 
     cwd = MUSIC_ROOT if MUSIC_ROOT.exists() else Path.home()
