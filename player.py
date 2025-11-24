@@ -6,10 +6,15 @@ from pathlib import Path
 import vlc
 from mutagen.easyid3 import EasyID3
 from mutagen.id3 import ID3NoHeaderError
+import json
+################################################################################
 
 AUDIO_EXTS = {".mp3"}
 MUSIC_ROOT = Path("/Users/andrewpearce/Google Drive/My Drive/music")
 ID3_CACHE = {}
+NOWPLAYING_COLOR = None
+PLAYLIST_STATE_PATH = Path.home() / ".pymus" / "playlist.json"
+
 
 ################################################################################
 def get_id3_label(path: Path) -> str:
@@ -27,18 +32,19 @@ def get_id3_label(path: Path) -> str:
         tags = EasyID3(p)
         title = tags.get("title", [None])[0]
         album = tags.get("album", [None])[0]
-        # date = tags.get("date", [None])[0]
-        # tracknumber = tags.get("tracknumber", [None])[0]
-        # discnumber = tags.get("discnumber", [None])[0]
         artist = tags.get("artist", [None])[0]
+        albumArtist = tags.get("albumartist", [None])[0]
         
-
         if artist and title:
             label = f"{artist} — {title}"
+        elif albumArtist and title:
+            label = f"{albumArtist} — {title}"
         elif title:
             label = title
         elif artist:
             label = artist
+        elif albumArtist:
+            label = albumArtist    
         if album:
             label += f" ({album})"
 
@@ -49,6 +55,58 @@ def get_id3_label(path: Path) -> str:
 
     ID3_CACHE[p] = label
     return label
+
+################################################################################
+def load_playlist_state():
+    """
+    Load playlist state from disk.
+    Returns (queue_paths: list[Path], idx: int) or ([], -1) if missing/invalid.
+    """
+    try:
+        if not PLAYLIST_STATE_PATH.exists():
+            return [], -1
+
+        data = json.loads(PLAYLIST_STATE_PATH.read_text())
+
+        raw_paths = data.get("queue", [])
+        idx = int(data.get("idx", -1))
+
+        # Filter to existing MP3 files only
+        queue = []
+        for p in raw_paths:
+            try:
+                path = Path(p)
+                if path.exists() and path.is_file() and path.suffix.lower() in AUDIO_EXTS:
+                    queue.append(path)
+            except Exception:
+                continue
+
+        if not queue:
+            return [], -1
+
+        idx = clamp(idx, 0, len(queue) - 1)
+        return queue, idx
+
+    except Exception:
+        return [], -1
+
+################################################################################
+def save_playlist_state(player):
+    """
+    Save current playlist + index to disk.
+    """
+    try:
+        PLAYLIST_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+        data = {
+            "queue": [str(p) for p in player.queue],
+            "idx": player.idx
+        }
+        PLAYLIST_STATE_PATH.write_text(json.dumps(data, indent=2))
+
+    except Exception:
+        # Silent fail: don't crash app on quit
+        pass
 
 
 def list_dir(path: Path):
@@ -81,6 +139,18 @@ def apply_filter(entries, text: str):
         return entries
     t = text.lower()
     return [e for e in entries if t in e.name.lower()]
+
+def draw_help_line(stdscr, y, fragments):
+    """
+    fragments = list of (text, attr) tuples.
+    E.g. [("Tab", BOLD), (" = switch pane  ", NORMAL)]
+    """
+    x = 0
+    h, w = stdscr.getmaxyx()
+
+    for text, attr in fragments:
+        stdscr.addnstr(y, x, text, max(0, w - x - 1), attr)
+        x += len(text)
 
 class AudioPlayer:
     def __init__(self):
@@ -207,6 +277,13 @@ class AudioPlayer:
         elif self.idx == j:
             self.idx = i
 
+    def clear_queue(self):
+        """Stop playback and clear the queue."""
+        self.queue = []
+        self.idx = -1
+        self.player.stop()
+        self.paused = False
+
 
 def clamp(n, lo, hi):
     return max(lo, min(n, hi))
@@ -231,11 +308,52 @@ def draw_ui(stdscr, cwd, entries, left_cursor, left_top,
     header = f"NCurses Music Player  |  Folder: {cwd}"
     stdscr.addnstr(0, 0, header, w - 1, curses.A_REVERSE)
 
+    BOLD = curses.color_pair(2) | curses.A_BOLD  #| curses.A_REVERSE
+    REG  = curses.color_pair(1) # curses.A_REVERSE
     if search_mode:
         help_line = "SEARCH MODE: type to filter | Enter=accept | Esc=cancel | BS=delete | Ctrl+U=clear"
+        stdscr.addnstr(h - 1, 0, help_line, w - 1, curses.A_REVERSE)
     else:
-        help_line = "Tab=switch pane | Enter=open/play | s=queue/play folder | a=append | /=search | Right: x/delete=delete d=move down u=move up | Space=pause | n/p=next/prev | b=back | q=quit"
-    stdscr.addnstr(h - 1, 0, help_line, w - 1, curses.A_REVERSE)
+        draw_help_line(
+            stdscr,
+            h - 1,
+            [
+                ("Tab", BOLD), 
+                ("=switch pane | ", REG),
+                ("Enter", BOLD),
+                ("=open/play | ", REG),
+                ("s", BOLD),
+                ("=queue/play folder | ", REG),
+                ("a", BOLD),
+                ("=append track | ", REG),
+                ("Right", BOLD),
+                (": ", REG),
+                ("x", BOLD),
+                ("/", REG),
+                ("delete", BOLD),
+                ("=delete item ", REG),
+                ("d", BOLD),
+                ("=move down ", REG),
+                ("u", BOLD),
+                ("=move up ", REG),
+                ("c", BOLD),
+                ("=clear all | ", REG),
+                ("Space", BOLD),
+                ("=pause | ", REG),
+                ("n", BOLD),
+                ("=next | ", REG),
+                ("p", BOLD),
+                ("=prev | ", REG),
+                ("b", BOLD),
+                ("=back | ", REG),
+                ("", REG),
+                ("=search   ", REG),
+                ("q", BOLD),
+                ("=quit", REG)
+            ]   
+        )
+        # help_line = "Tab=switch pane | Enter=open/play | s=queue/play folder | a=append | /=search | Right: x/delete=delete item d=move down u=move up c=clear all | Space=pause | n/p=next/prev | b=back | q=quit"
+        # stdscr.addnstr(h - 1, 0, help_line, w - 1, curses.A_REVERSE)
 
     list_h = h - 4
 
@@ -318,7 +436,7 @@ def draw_ui(stdscr, cwd, entries, left_cursor, left_top,
     # centre horizontally
     x = max(0, (w - len(status_line)) // 2)
 
-    stdscr.addnstr(h - 2, x, status_line, len(status_line), curses.A_DIM)
+    stdscr.addnstr(h - 2, x, status_line, len(status_line), NOWPLAYING_COLOR)
 
     if status_msg:
         stdscr.addnstr(h - 4, 0, status_msg, w - 1, curses.A_DIM)
@@ -329,7 +447,15 @@ def main(stdscr):
     curses.curs_set(0)
     stdscr.nodelay(True)
     stdscr.keypad(True)
-
+    global NOWPLAYING_COLOR
+    try:
+        curses.start_color()
+        curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)
+        curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
+        NOWPLAYING_COLOR = curses.color_pair(1) | curses.A_BOLD
+    except:
+        NOWPLAYING_COLOR = curses.A_BOLD
+    
     cwd = MUSIC_ROOT if MUSIC_ROOT.exists() else Path.home()
 
     all_entries = list_dir(cwd)
@@ -346,20 +472,26 @@ def main(stdscr):
 
     status_msg = ""
     player = AudioPlayer()
-
+    # Auto-load previous playlist (do NOT autoplay)
+    loaded_queue, loaded_idx = load_playlist_state()
+    if loaded_queue:
+        player.queue = loaded_queue
+        player.idx = loaded_idx
+        right_cursor = clamp(loaded_idx, 0, len(player.queue) - 1)
+        status_msg = f"Restored playlist ({len(player.queue)} tracks)"
+    
     last_tick = time.time()
 
     # Search mode state
     search_mode = False
     filter_before_search = ""
 
-    while True:
+    try: 
+      while True:
         if player.queue and player.player.get_state() == vlc.State.Ended:
             player.next()
-
         if focus != "right" and player.idx >= 0:
             right_cursor = player.idx
-
         now = time.time()
         if now - last_tick > 0.03:
             h, w = stdscr.getmaxyx()
@@ -372,13 +504,11 @@ def main(stdscr):
                 filter_text, search_mode
             )
             last_tick = now
-
         key = stdscr.getch()
         if key == -1:
             continue
-
         status_msg = ""
-
+        ########################################################################
         # --- SEARCH MODE HANDLING (left pane only) ---
         if search_mode:
             # Esc cancels search and restores previous filter
@@ -415,9 +545,9 @@ def main(stdscr):
                 entries = apply_filter(all_entries, filter_text)
                 left_cursor, left_top = 0, 0
             continue
-
+        
+        ####################################################################    
         # --- NORMAL MODE HANDLING ---
-
         ########################################################################
         # Quit
         if key in (ord("q"), 27):
@@ -613,9 +743,19 @@ def main(stdscr):
                 player.move_index(right_cursor, -1)
                 right_cursor -= 1
                 status_msg = "Moved item up"
+                
+        ########################################################################
+        # Clear playlist (right pane)
+        elif key == ord("c") and focus == "right":
+            player.clear_queue()
+            right_cursor = 0
+            right_top = 0
+            status_msg = "Cleared playlist"
 
-
-    player.player.stop()
+    finally:
+        # Save playlist state on exit
+        save_playlist_state(player)
+        player.player.stop()
 
 if __name__ == "__main__":
     curses.wrapper(main)
