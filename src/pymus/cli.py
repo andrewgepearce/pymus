@@ -5,13 +5,46 @@ import time
 from pathlib import Path
 import vlc
 from mutagen.easyid3 import EasyID3
-from mutagen.id3 import ID3NoHeaderError
+from mutagen.id3._util import ID3NoHeaderError
 import json
+
+################################################################################
+# Where to read the default music folder from:
+#   ~/.pymus/folder.json
+# Expected structure:
+#   { "music_folder": "/full/path/to/your/music" }
+CONFIG_PATH = Path.home() / ".pymus" / "folder.json"
+
+
+################################################################################
+# Determine the default music folder.
+# Priority:
+#   - If ~/.pymus/folder.json exists and is valid JSON, and has a
+#     'music_folder' key pointing to an existing directory, use that.
+#   - Otherwise, fall back to the user's home directory.
+def load_music_root() -> Path:
+    try:
+        if not CONFIG_PATH.exists():
+            return Path.home()
+        raw = CONFIG_PATH.read_text()
+        data = json.loads(raw)
+        folder_str = data.get("music_folder")
+        if not folder_str:
+            return Path.home()
+        folder_path = Path(folder_str).expanduser()
+        if folder_path.is_dir():
+            return folder_path
+        # Config present but path invalid → fall back
+        return Path.home()
+    except Exception:
+        # Any problem (bad JSON, permissions, etc.) → safe fallback
+        return Path.home()
+
 
 ################################################################################
 
 AUDIO_EXTS = {".mp3"}
-MUSIC_ROOT = Path("/Users/andrewpearce/Google Drive/My Drive/music")
+MUSIC_ROOT = load_music_root()
 ID3_CACHE = {}
 NOWPLAYING_COLOR = None
 PLAYLIST_STATE_PATH = Path.home() / ".pymus" / "playlist.json"
@@ -31,10 +64,10 @@ def get_id3_label(path: Path) -> str:
 
     try:
         tags = EasyID3(p)
-        title = tags.get("title", [None])[0]
-        album = tags.get("album", [None])[0]
-        artist = tags.get("artist", [None])[0]
-        albumArtist = tags.get("albumartist", [None])[0]
+        title = tags.get("title", [None])[0]  # type: ignore
+        album = tags.get("album", [None])[0]  # type: ignore
+        artist = tags.get("artist", [None])[0]  # type: ignore
+        albumArtist = tags.get("albumartist", [None])[0]  # type: ignore
 
         if artist and title:
             label = f"{artist} — {title}"
@@ -166,7 +199,7 @@ def draw_help_line(stdscr, y, fragments):
 class AudioPlayer:
     def __init__(self):
         self.instance = vlc.Instance("--no-video", "--quiet")
-        self.player = self.instance.media_player_new()
+        self.player = self.instance.media_player_new()  # type: ignore
         self.queue = []
         self.idx = -1
         self.paused = False
@@ -184,7 +217,7 @@ class AudioPlayer:
         cur = self.current()
         if not cur:
             return
-        media = self.instance.media_new(str(cur))
+        media = self.instance.media_new(str(cur))  # type: ignore
         self.player.set_media(media)
         self.player.play()
         self.paused = False
@@ -385,8 +418,8 @@ def draw_ui(
                 ("=prev | ", REG),
                 ("b", BOLD),
                 ("=back | ", REG),
-                ("", REG),
-                ("=search   ", REG),
+                ("/", BOLD),
+                ("=search | ", REG),
                 ("q", BOLD),
                 ("=quit", REG),
             ],
@@ -527,7 +560,7 @@ def main(stdscr):
 
     try:
         while True:
-            if player.queue and player.player.get_state() == vlc.State.Ended:
+            if player.queue and player.player.get_state() == vlc.State.Ended:  # type: ignore
                 player.next()
             if focus != "right" and player.idx >= 0:
                 right_cursor = player.idx
@@ -663,7 +696,7 @@ def main(stdscr):
                 else:
                     if player.queue:
                         player.play_index(right_cursor)
-                        status_msg = f"Playing {player.current().name}"
+                        status_msg = f"Playing {player.current().name}"  # type: ignore
 
             ########################################################################
             # 's' to queue/play folder
@@ -694,7 +727,7 @@ def main(stdscr):
                 else:
                     if player.queue:
                         player.play_index(right_cursor)
-                        status_msg = f"Playing {player.current().name}"
+                        status_msg = f"Playing {player.current().name}"  # type: ignore
 
             ########################################################################
             # 'a' = APPEND behaviour

@@ -4,7 +4,7 @@ Terminal-first MP3 player with a split-pane ncurses UI. Browse your music folder
 
 ## What it does
 
-- Browses a root music folder (defaults to `/Users/andrewpearce/Google Drive/My Drive/music`, falls back to `~` if missing).
+- Browses a root music folder (read from the "music_folder" property of to `~/.pymus/folder.json`, falls back to `~` if missing).
 - Shows folders first, then MP3 files (only `.mp3` files are considered).
 - Builds a play queue from a single track or an entire folder (recursively) and plays through VLC.
 - Reads ID3 tags to show `Artist — Title (Album)` when available.
