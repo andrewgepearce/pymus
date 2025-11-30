@@ -7,6 +7,7 @@ import vlc
 from mutagen.easyid3 import EasyID3
 from mutagen.id3._util import ID3NoHeaderError
 import json
+import random
 
 ################################################################################
 # Where to read the default music folder from:
@@ -321,6 +322,29 @@ class AudioPlayer:
         elif self.idx == j:
             self.idx = i
 
+    def shuffle_future(self):
+        """Shuffle only the *future* part of the queue.
+
+        All items after the currently playing index (self.idx) are shuffled in
+        place. The currently playing track and everything before it keep their
+        relative order so that already-played songs are not re-inserted into
+        the future queue.
+        """
+        if not self.queue:
+            return
+
+        # If nothing is playing yet or we're at the end, shuffle whole queue (if >1).
+        if self.idx < 0 or self.idx >= len(self.queue) - 1:
+            if len(self.queue) > 1:
+                random.shuffle(self.queue)
+            return
+
+        # Slice out the future portion, shuffle it, and splice back in.
+        head = self.queue[: self.idx + 1]
+        tail = self.queue[self.idx + 1 :]
+        random.shuffle(tail)
+        self.queue = head + tail
+
     def clear_queue(self):
         """Stop playback and clear the queue."""
         self.queue = []
@@ -410,6 +434,8 @@ def draw_ui(
                 ("=move up ", REG),
                 ("c", BOLD),
                 ("=clear all | ", REG),
+                ("f", BOLD),
+                ("=shuffle future | ", REG),
                 ("Space", BOLD),
                 ("=pause | ", REG),
                 ("n", BOLD),
@@ -819,6 +845,15 @@ def main(stdscr):
                 right_cursor = 0
                 right_top = 0
                 status_msg = "Cleared playlist"
+
+            ########################################################################
+            # Shuffle future queue (right pane)
+            elif key == ord("f") and focus == "right":
+                if player.queue:
+                    player.shuffle_future()
+                    # Keep selection on current track if one is active; otherwise stay at top.
+                    right_cursor = player.idx if player.idx >= 0 else 0
+                    status_msg = "Shuffled upcoming tracks"
 
     finally:
         # Save playlist state on exit
